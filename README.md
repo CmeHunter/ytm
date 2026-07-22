@@ -27,6 +27,40 @@ node server.js
 
 然後開啟 http://localhost:3000
 
+## 盲盒監控（Discord 通知）
+
+`monitor.js` 為常駐監控程式，依 `monitor-config.json` 設定的機台清單，每小時查詢一次庫存，
+統計商品名稱含「盲盒」的總數量，並在以下兩種轉變時發送 Discord Webhook 通知：
+
+- **0 → N**：盲盒到貨（附品項明細與數量）
+- **N → 0**：盲盒售罄
+
+啟動方式（需保持視窗開啟，關閉即停止監控）：
+
+```
+node monitor.js
+```
+
+行為說明：
+
+- 首次執行只建立基準、不發通知；狀態存於 `monitor-state.json`（自動產生）
+- 查詢失敗的機台跳過該輪比對、保留舊狀態，避免官網暫時故障誤報售罄
+- 非零數量之間的變動（例如 3 → 1）只更新狀態、不通知
+- `monitor-config.json` 內含 Discord Webhook URL（機密），已列入 `.gitignore` 不進版控
+
+`monitor-config.json` 格式範例：
+
+```json
+{
+  "webhookUrl": "https://discord.com/api/webhooks/...",
+  "keyword": "盲盒",
+  "intervalMinutes": 60,
+  "machines": [
+    { "tid": "F7D4C469168B78", "name": "淡水信義線-民權西路站" }
+  ]
+}
+```
+
 ## GitHub Pages 部署
 
 1. 將整個專案推上 GitHub 倉庫

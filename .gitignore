@@ -1,5 +1,9 @@
 # 執行時自動產生的站點快取
 stations-cache.json
 
+# 盲盒監控：設定檔含 Discord Webhook（機密）、狀態檔為執行時產生
+monitor-config.json
+monitor-state.json
+
 # 工具狀態目錄
 .omc/
