@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YTM 庫存查詢工具</title>
+<style>
+  :root {
+    --primary: #b5854b;
+    --primary-dark: #966a38;
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --border: #e5ddd0;
+    --text: #3d3529;
+    --muted: #8a7f6e;
+    --danger: #c0392b;
+    --ok: #2e7d32;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    max-width: 860px; margin: 0 auto; padding: 24px 16px 60px;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1.05rem; margin-bottom: 12px; }
+  .toolbar h2 { margin-bottom: 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  select, button {
+    font-size: .95rem; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: #fff; color: var(--text);
+  }
+  select { min-width: 180px; flex: 1; }
+  button { cursor: pointer; white-space: nowrap; transition: opacity .15s; }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn-query { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: bold; padding: 10px 28px; }
+  .btn-remove { background: none; border: none; color: var(--danger); font-size: 1rem; padding: 2px 6px; }
+  .watch-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 4px; border-bottom: 1px dashed var(--border);
+  }
+  .watch-item:last-child { border-bottom: none; }
+  .watch-name { font-weight: bold; }
+  .watch-meta { color: var(--muted); font-size: .8rem; }
+  .empty { color: var(--muted); text-align: center; padding: 16px 0; font-size: .9rem; }
+  .result-station { margin-bottom: 14px; }
+  .result-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 4px; margin-bottom: 6px;
+  }
+  .result-head .name { font-weight: bold; font-size: 1rem; }
+  .result-head .addr { color: var(--muted); font-size: .8rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg); font-weight: bold; }
+  td.num, th.num { text-align: right; }
+  .qty-low { color: var(--danger); font-weight: bold; }
+  .qty-ok { color: var(--ok); font-weight: bold; }
+  .pinned td { font-weight: bold; }
+  .official-link { color: var(--primary); word-break: break-all; }
+  .no-stock { color: var(--danger); font-size: .9rem; padding: 4px 0; }
+  .error-msg { color: var(--danger); font-size: .9rem; }
+  .loading { color: var(--muted); font-size: .9rem; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .timestamp { color: var(--muted); font-size: .8rem; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1e1a14; --card: #2a2419; --border: #453b2c; --text: #e8e0d2; --muted: #a2957f; }
+    select, button { background: #352d1f; color: var(--text); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-query { background: var(--ok); color: #fff; }
+    th { background: #352d1f; }
+  }
+</style>
+</head>
+<body>
+  <h1>YTM 庫存查詢工具</h1>
+  <p class="subtitle">維護自選 YTM 站點清單，一鍵查詢所有站點的即時庫存<br>
+    資料來源：亞尼克官網庫存查詢頁
+    <a href="https://www.yannick.com.tw/ytm/service2" target="_blank" rel="noopener" class="official-link">https://www.yannick.com.tw/ytm/service2</a>
+  </p>
+
+  <!-- 站點維護區 -->
+  <div class="card">
+    <div class="toolbar">
+      <h2>加入站點</h2>
+      <button id="refreshBtn" title="重新從官網抓取最新站點清單">↻ 更新站點資料</button>
+    </div>
+    <div class="row">
+      <select id="branchSelect">
+        <option value="">請選擇據點分類</option>
+      </select>
+      <select id="stationSelect" disabled>
+        <option value="">請選擇 YTM 站點</option>
+      </select>
+      <button class="btn-primary" id="addBtn" disabled>＋ 加入清單</button>
+    </div>
+    <p class="error-msg" id="loadError" style="display:none; margin-top:8px;"></p>
+  </div>
+
+  <!-- 自選清單區 -->
+  <div class="card">
+    <div class="toolbar">
+      <h2>我的站點清單</h2>
+      <button class="btn-query" id="queryBtn" disabled>查詢庫存</button>
+    </div>
+    <div id="watchList"><p class="empty">尚未加入任何站點，請在上方選擇站點後按「加入清單」</p></div>
+  </div>
+
+  <!-- 查詢結果區 -->
+  <div class="card" id="resultCard" style="display:none;">
+    <div class="toolbar">
+      <h2>庫存查詢結果</h2>
+      <span class="timestamp" id="queryTime"></span>
+    </div>
+    <div id="results"></div>
+  </div>
+
+<script>
+// 內建站點快照（由 stations-cache.json 產生；按「更新站點資料」可透過代理重新抓取官網最新清單）
+const SNAPSHOT = {"fetchedAt":1784692522845,"branchs":[{"BranchCode":"001","BranchName":"台北捷運據點"},{"BranchCode":"002","BranchName":"高雄捷運據點"},{"BranchCode":"003","BranchName":"門市據點"}],"machines":[{"TID":"F638C63801AA82","TName":"環狀線-新北產業園區站","TAddr":"新北市新莊區五工路35號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%96%B0%E5%8C%97%E7%94%A2%E6%A5%AD%E5%9C%92%E5%8D%80%E7%AB%99.jpg","Sort":70},{"TID":"F638C3E505D058","TName":"環狀線-幸福站","TAddr":"新北市新莊區思源路292號(2F連通道層出口)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%B9%B8%E7%A6%8F%E7%AB%99.jpg","Sort":69},{"TID":"F638C3CB05B54A","TName":"環狀線-板橋站","TAddr":"新北市板橋區新站路66號(3F大廳層出口)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%9D%BF%E6%A9%8B%E7%AB%99.jpg","Sort":68},{"TID":"F7D4C6240F2D20","TName":"環狀線-中原站","TAddr":"新北市中和區板南路510號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%AD%E5%8E%9F%E7%AB%99.jpg","Sort":67},{"TID":"F638C39205D81F","TName":"環狀線-中和站","TAddr":"新北市中和區中山路二段271號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%AD%E5%92%8C%E7%AB%99.jpg","Sort":66},{"TID":"F638C3C80C2AC3","TName":"環狀線-十四張站","TAddr":"新北市新店區民權路282號(2F大廳層出口)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8D%81%E5%9B%9B%E5%BC%B5%E7%AB%99.jpg","Sort":65},{"TID":"F7D4C52312B45B","TName":"松山新店線-松山站","TAddr":"臺北市松山區八德路4段742號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%9D%BE%E5%B1%B1%E7%AB%99.jpg","Sort":64},{"TID":"F7D4C41212D4F7","TName":"松山新店線-南京三民站","TAddr":"臺北市松山區南京東路5段237號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8D%97%E4%BA%AC%E4%B8%89%E6%B0%91%E7%AB%99.jpg","Sort":63},{"TID":"F7D4C45C1650DB","TName":"松山新店線-台北小巨蛋站","TAddr":"臺北市松山區南京東路4段10之1號(出口2置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-台北小巨蛋站.jpg","Sort":62},{"TID":"F7D4C59D12B5D8","TName":"松山新店線-南京復興站","TAddr":"臺北市松山區南京東路3段253號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8D%97%E4%BA%AC%E5%BE%A9%E8%88%88%E7%AB%99.jpg","Sort":62},{"TID":"F7D4C6240F2DD2","TName":"松山新店線-北門站","TAddr":"臺北市大同區塔城街10號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8C%97%E9%96%80%E7%AB%99.jpg","Sort":61},{"TID":"F7D4C384125118","TName":"松山新店線-古亭站","TAddr":"臺北市中正區羅斯福路2段164之1號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8F%A4%E4%BA%AD%E7%AB%99.jpg","Sort":60},{"TID":"F7D4C3DA12A3A9","TName":"松山新店線-台電大樓站","TAddr":"臺北市中正區羅斯福路3段126之5號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8F%B0%E9%9B%BB%E5%A4%A7%E6%A8%93%E7%AB%99.jpg","Sort":59},{"TID":"F7D4C38C128657","TName":"松山新店線-公館站","TAddr":"臺北市中正區羅斯福路4段64之1號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%85%AC%E9%A4%A8%E7%AB%99.jpg","Sort":58},{"TID":"F7D4C3D7144229","TName":"松山新店線-萬隆站","TAddr":"臺北市文山區羅斯福路5段214號(出口4置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-萬隆站.jpg","Sort":57},{"TID":"F7D4C594122F68","TName":"松山新店線-景美站","TAddr":"臺北市文山區羅斯福路6段216號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%99%AF%E7%BE%8E%E7%AB%99.jpg","Sort":57},{"TID":"F7D4C52312B45A","TName":"松山新店線-大坪林站","TAddr":"新北市新店區北新路3段190號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%A4%A7%E5%9D%AA%E6%9E%97%E7%AB%99.jpg","Sort":56},{"TID":"F638C3840C561D","TName":"松山新店線-七張站","TAddr":"231007新北市新店區北新路2段150號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%83%E5%BC%B5%E7%AB%99-01.jpg","Sort":55},{"TID":"F7D4C3C81216B5","TName":"松山新店線-新店站","TAddr":"新北市新店區北宜路1段2號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%96%B0%E5%BA%97%E7%AB%99.jpg","Sort":54},{"TID":"F638C39205D81C","TName":"中和新蘆線-蘆洲站","TAddr":"247011新北市蘆洲區三民路386號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E8%98%86%E6%B4%B2%E7%AB%99-01.jpg","Sort":50},{"TID":"F7D4C3F716C4CA","TName":"中和新蘆線-三民高中站","TAddr":"新北市蘆洲區三民路105號B1(出口2置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-三民高中站.jpg","Sort":49},{"TID":"F7D4C630123253","TName":"中和新蘆線-徐匯中學站","TAddr":"新北市蘆洲區中山一路3號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%BE%90%E5%8C%AF%E4%B8%AD%E5%AD%B8%E7%AB%99.jpg","Sort":49},{"TID":"F7D4C3B4116D80","TName":"中和新蘆線-三和國中站","TAddr":"新北市三重區三和路4段107號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%89%E5%92%8C%E5%9C%8B%E4%B8%AD%E7%AB%99.jpg","Sort":48},{"TID":"F7D4C3F716C4CC","TName":"中和新蘆線-迴龍站","TAddr":"新北市新莊區中正路758號B1(出口3置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-迴龍站.jpg","Sort":47},{"TID":"F7D4C3F416BCD5","TName":"中和新蘆線-菜寮站","TAddr":"新北市三重區重新路3段150號B1(出口1置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-菜寮站.jpg","Sort":47},{"TID":"F7D4C492120253","TName":"中和新蘆線-三重國小站","TAddr":"新北市三重區三和路3段5號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%89%E9%87%8D%E5%9C%8B%E5%B0%8F%E7%AB%99.jpg","Sort":47},{"TID":"F7D4C4A21670DE","TName":"中和新蘆線-大橋頭站","TAddr":"臺北市大同區民權西路223號B1(出口詢問處旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-大橋頭站.jpg","Sort":46},{"TID":"F7D4C3B4116D81","TName":"中和新蘆線-新莊站","TAddr":"新北市新莊區中正路138號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%96%B0%E8%8E%8A%E7%AB%99.jpg","Sort":46},{"TID":"F7D4C594122F69","TName":"中和新蘆線-台北橋站","TAddr":"新北市三重區重新路1段108號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8F%B0%E5%8C%97%E6%A9%8B%E7%AB%99.jpg","Sort":46},{"TID":"F7D4C630123254","TName":"中和新蘆線-中山國小站","TAddr":"臺北市中山區民權東路1段71號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%B8%AD%E5%B1%B1%E5%9C%8B%E5%B0%8F%E7%AB%99.jpg","Sort":45},{"TID":"F7D4C384125119","TName":"中和新蘆線-行天宮站","TAddr":"臺北市中山區松江路316號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E8%A1%8C%E5%A4%A9%E5%AE%AE%E7%AB%99.jpg","Sort":44},{"TID":"F7D4C6240F2DD0","TName":"中和新蘆線-松江南京站","TAddr":"臺北市中山區松江路126號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%9D%BE%E6%B1%9F%E5%8D%97%E4%BA%AC%E7%AB%99.jpg","Sort":43},{"TID":"F638C3B40B65E1","TName":"中和新蘆線-頂溪站","TAddr":"234016新北市永和區永和路2段168號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E9%A0%82%E6%BA%AA%E7%AB%99-01.jpg","Sort":42},{"TID":"F7D4C492120255","TName":"中和新蘆線-永安市場站","TAddr":"新北市中和區中和路388號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%B0%B8%E5%AE%89%E5%B8%82%E5%A0%B4%E7%AB%99.jpg","Sort":41},{"TID":"F638C56F0B2313","TName":"中和新蘆線-景安站","TAddr":"235086新北市中和區景平路486號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%99%AF%E5%AE%89%E7%AB%99-%20%E4%B8%AD%E6%96%87-01.jpg","Sort":40},{"TID":"F638C5390CABA0","TName":"中和新蘆線-南勢角站","TAddr":"235050新北市中和區捷運路6號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E5%8D%97%E5%8B%A2%E8%A7%92%E7%AB%99-01.jpg","Sort":39},{"TID":"F7D4C56F112E44","TName":"文湖線-科技大樓站","TAddr":"106101臺北市大安區復興南路2段235號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E7%A7%91%E6%8A%80%E5%A4%A7%E6%A8%93%E7%AB%99-01.jpg","Sort":38},{"TID":"F7D4C50F16F155","TName":"板南線-南港站","TAddr":"臺北市南港區忠孝東路7段380號(出口2A詢問處旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-南港站.jpg","Sort":37},{"TID":"F7D4C473169749","TName":"文湖線-西湖站","TAddr":"臺北市內湖區內湖路1段256號(出口1置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-西湖站.jpg","Sort":37},{"TID":"F7D4C52312B45C","TName":"板南線-南港展覽館站","TAddr":"臺北市南港區研究院路1段1號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8D%97%E6%B8%AF%E5%B1%95%E8%A6%BD%E9%A4%A8%E7%AB%99.jpg","Sort":37},{"TID":"F7D4C3DA12A3A7","TName":"板南線-後山埤站","TAddr":"臺北市南港區忠孝東路6段2號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%BE%8C%E5%B1%B1%E5%9F%A4%E7%AB%99.jpg","Sort":36},{"TID":"F7D4C5391249AD","TName":"板南線-永春站","TAddr":"臺北市信義區忠孝東路5段455號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%B0%B8%E6%98%A5%E7%AB%99.jpg","Sort":35},{"TID":"F638C3AB05CB05","TName":"板南線-市政府站","TAddr":"110060臺北市信義區忠孝東路5段2號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E5%B8%82%E6%94%BF%E5%BA%9C%E7%AB%99-01.jpg","Sort":34},{"TID":"F7D4C3DA12A3AA","TName":"板南線-國父紀念館站","TAddr":"臺北市信義區忠孝東路4段400號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%9C%8B%E7%88%B6%E7%B4%80%E5%BF%B5%E9%A4%A8%E7%AB%99.jpg","Sort":33},{"TID":"F7D4C6240F2DD1","TName":"板南線-忠孝復興站","TAddr":"臺北市大安區忠孝東路4段47號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%BF%A0%E5%AD%9D%E5%BE%A9%E8%88%88%E7%AB%99.jpg","Sort":32},{"TID":"F7D4C53512A9A0","TName":"板南線-忠孝新生站","TAddr":"臺北市大安區新生南路1段67號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%BF%A0%E5%AD%9D%E6%96%B0%E7%94%9F%E7%AB%99.jpg","Sort":31},{"TID":"F638C5930260D9","TName":"板南線-台北車站","TAddr":"100009臺北市中正區忠孝西路1段49號B1 (近B1樓層M8出口)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8F%B0%E5%8C%97%E8%BB%8A%E7%AB%99-01.jpg","Sort":30},{"TID":"F7D4C41212D4F8","TName":"板南線-龍山寺站","TAddr":"臺北市萬華區西園路1段153號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E9%BE%8D%E5%B1%B1%E5%AF%BA%E7%AB%99.jpg","Sort":29},{"TID":"F7D4C41212D4FA","TName":"板南線-江子翠站","TAddr":"新北市板橋區文化路2段296號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"0.YTM查詢-1-捷運路線圖-江子翠站.jpg","Sort":28},{"TID":"F638C38C0C5451","TName":"板南線-新埔站","TAddr":"220030新北市板橋區民生路3段2號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E6%96%B0%E5%9F%94%E7%AB%99-01.jpg","Sort":27},{"TID":"F638C56F0B2314","TName":"板南線-板橋站","TAddr":"220073新北市板橋區站前路5號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E6%9D%BF%E6%A9%8B%E7%AB%99-01.jpg","Sort":26},{"TID":"F638C3C405B6D2","TName":"板南線-府中站","TAddr":"220052新北市板橋區縣民大道1段193號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E5%BA%9C%E4%B8%AD%E7%AB%99-01.jpg","Sort":25},{"TID":"F7D4C41212D4F9","TName":"板南線-亞東醫院站","TAddr":"新北市板橋區南雅南路2段17號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E4%BA%9E%E6%9D%B1%E9%86%AB%E9%99%A2%E7%AB%99.jpg","Sort":24},{"TID":"F638C38005BF2E","TName":"板南線-海山站","TAddr":"236023新北市土城區海山路39號B2","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E6%B5%B7%E5%B1%B1%E7%AB%99-01.jpg","Sort":23},{"TID":"F7D4C50F16F035","TName":"板南線-土城站","TAddr":"新北市土城區金城路1段105號B1(出口2置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-土城站.jpg","Sort":22},{"TID":"F7D4C594122F67","TName":"板南線-永寧站","TAddr":"新北市土城區中央路3段105號B1","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%B0%B8%E5%AF%A7%E7%AB%99.jpg","Sort":22},{"TID":"F7D4C469168A57","TName":"板南線-頂埔站","TAddr":"新北市土城區中央路4段51之6號B3(出口4置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-頂埔站.jpg","Sort":21},{"TID":"F7D4C56F112E3D","TName":"淡水信義線-淡水站","TAddr":"新北市淡水區中正路1號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E6%B7%A1%E6%B0%B4%E7%AB%99.jpg","Sort":21},{"TID":"F7D4C4A516D2EC","TName":"淡水信義線-石牌站","TAddr":"臺北市北投區石牌路1段200號(出口1)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-石牌站.jpg","Sort":20},{"TID":"F638C3DA0C957D","TName":"淡水信義線-北投站","TAddr":"112006臺北市北投區光明路1號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%8C%97%E6%8A%95%E7%AB%99-01.jpg","Sort":20},{"TID":"F7D4C45C164FBA","TName":"淡水信義線-士林站","TAddr":"臺北市士林區福德路1號(出口1)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-士林站.jpg","Sort":19},{"TID":"F7D4C3D7144228","TName":"淡水信義線-劍潭站","TAddr":"臺北市士林區中山北路5段65號(出口1)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-劍潭站.jpg","Sort":19},{"TID":"F7D4C52312B459","TName":"紅線-楠梓科技園區站","TAddr":"高雄市楠梓區加昌路598號(紅線R19/穿堂走道靠近1號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-楠梓科技園區站.jpg","Sort":19},{"TID":"F638C61D01B3CB","TName":"淡水信義線-圓山站","TAddr":"103032臺北市大同區酒泉街9之1號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E5%9C%93%E5%B1%B1%E7%AB%99-01.jpg","Sort":19},{"TID":"F7D4C469168B78","TName":"淡水信義線-民權西路站","TAddr":"臺北市大同區民權西路72號(出口4公共電話旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-民權西路站.jpg","Sort":18},{"TID":"F7D4C4A2166FC0","TName":"淡水信義線-雙連站","TAddr":"臺北市大同區民生西路47號(近中山地下街公共電話旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-%E9%9B%99%E9%80%A3%E7%AB%99.jpg","Sort":18},{"TID":"F7D4C59D12B5D7","TName":"紅線-生態園區站","TAddr":"高雄市左營區博愛三路435號B1(紅線R15/穿堂走道靠近1號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-生態園區站.jpg","Sort":18},{"TID":"F638C39405D3A4","TName":"淡水信義線-中山站","TAddr":"103014臺北市大同區南京西路16號","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-1-%E6%8D%B7%E9%81%8B%E8%B7%AF%E7%B7%9A%E5%9C%96-2%E4%B8%AD%E5%B1%B1%E7%AB%99-01.jpg","Sort":18},{"TID":"F7D4C424167BFD","TName":"淡水信義線-台大醫院站","TAddr":"臺北市中正區公園路52號B1(出口4置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-台大醫院站.jpg","Sort":17},{"TID":"F7D4C3B4116D82","TName":"紅線-巨蛋站","TAddr":"高雄市左營區博愛二路485號B1(紅線R14/穿堂走道靠近1號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-巨蛋站.jpg","Sort":17},{"TID":"F7D4C47316974B","TName":"淡水信義線-大安森林公園站","TAddr":"臺北市大安區信義路3段100號B1(出口5置物櫃旁)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-大安森林公園站.jpg","Sort":16},{"TID":"F7D4C59D12B5D6","TName":"紅線-凹子底站","TAddr":"高雄市鼓山區博愛二路21號B1(紅線R13/近3號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-凹子底站.jpg","Sort":16},{"TID":"F7D4C4A21670E1","TName":"淡水信義線-信義安和站","TAddr":"臺北市大安區信義路4段212之1號B1(出口1)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-信義安和站.jpg","Sort":15},{"TID":"F7D4C4A516D2EE","TName":"淡水信義線-大安站","TAddr":"臺北市大安區信義路3段180號B1(出口詢問處左前方)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-大安站.jpg","Sort":15},{"TID":"F7D4C5391249AE","TName":"紅線-後驛站","TAddr":"高雄市三民區博愛一路220號B1(紅線R12/近2號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-後驛站.jpg","Sort":15},{"TID":"F7D4C47316974C","TName":"淡水信義線-象山站","TAddr":"臺北市信義區信義路5段152號B1(出口2通道)","RID":"001","RName":"台北捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-象山站.jpg","Sort":14},{"TID":"F7D4C5391249AF","TName":"紅線-中央公園站","TAddr":"高雄市前金區中山一路11號B1(紅線R9/穿堂層 往2號出口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-中央公園站.jpg","Sort":14},{"TID":"F7D4C55712A1F8","TName":"紅線-三多商圈站","TAddr":"高雄市前鎮區中山二路268號B1(紅線R8/近4號出入口置物櫃前方)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-三多商圈站.jpg","Sort":13},{"TID":"F7D4C492120254","TName":"紅線-獅甲站","TAddr":"高雄市前鎮區中山三路150號B1(紅線R7/近3號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-獅甲站.jpg","Sort":12},{"TID":"F7D4C55712A1FA","TName":"紅線-凱旋站","TAddr":"高雄市前鎮區中山三路1號B1(紅線R6/近1號出入口廁所旁)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-凱旋站.jpg","Sort":11},{"TID":"F7D4C3C81216B3","TName":"紅線-小港站","TAddr":"高雄市小港區沿海一路280號B1(紅線R3/近3號出入口)","RID":"002","RName":"高雄捷運據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-1-捷運路線圖-小港站.jpg","Sort":10},{"TID":"F638C55001AE22","TName":"內湖旗艦店","TAddr":"台北市內湖區瑞湖街178巷15號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-%E9%96%80%E5%B8%82-%E5%85%A7%E6%B9%96.jpg","Sort":7},{"TID":"F638C3E205B6E8","TName":"屏東仁愛店","TAddr":"屏東縣屏東市仁愛路14之16號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-%E9%96%80%E5%B8%82-03%E5%B1%8F%E6%9D%B1.jpg","Sort":6},{"TID":"F7D4C6240F2D1F","TName":"台中崇德店","TAddr":"台中市北區崇德路一段482號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-%E9%96%80%E5%B8%82-%E5%B4%87%E5%BE%B7.jpg","Sort":4},{"TID":"F7D4C41F1673E2","TName":"台中旗艦店","TAddr":"台中市五權西四街120號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-門市.jpg","Sort":3},{"TID":"F638C5390CABA2","TName":"桃園中正店","TAddr":"桃園市桃園區中正路50號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/photo/YTM2/0.YTM%E6%9F%A5%E8%A9%A2-%E9%96%80%E5%B8%82-01%E6%A1%83%E5%9C%92.jpg","Sort":2},{"TID":"F638C3E205B6E6","TName":"台北西門店","TAddr":"台北市萬華區成都路18號","RID":"003","RName":"門市據點","PHOTO_URL":"https://photo.yannick.com.tw/0.YTM查詢-門市-西門.jpg","Sort":1}]};
+</script>
+<script>
+(function () {
+  const STORAGE_KEY = 'ytm-watchlist';
+  const STATIONS_KEY = 'ytm-stations';
+  const YANNICK_BASE = 'https://www.yannick.com.tw';
+  // GitHub Pages 為純靜態網頁，透過公開 CORS 代理轉發請求（官網 API 不允許跨網域直接呼叫）
+  const proxied = url => 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+
+  let machines = [];
+  let branchs = [];
+  let watchList = loadJson(STORAGE_KEY) || [];
+
+  const branchSelect = document.getElementById('branchSelect');
+  const stationSelect = document.getElementById('stationSelect');
+  const addBtn = document.getElementById('addBtn');
+  const queryBtn = document.getElementById('queryBtn');
+  const watchListEl = document.getElementById('watchList');
+  const resultsEl = document.getElementById('results');
+  const resultCard = document.getElementById('resultCard');
+  const queryTimeEl = document.getElementById('queryTime');
+  const loadError = document.getElementById('loadError');
+  const refreshBtn = document.getElementById('refreshBtn');
+
+  function loadJson(key) {
+    try { return JSON.parse(localStorage.getItem(key)); }
+    catch { return null; }
+  }
+
+  function applyStations(data) {
+    branchs = data.branchs;
+    machines = data.machines;
+    const prevBranch = branchSelect.value;
+    branchSelect.innerHTML = '<option value="">請選擇據點分類</option>' +
+      branchs.map(b => `<option value="${b.BranchCode}">${b.BranchName}</option>`).join('');
+    branchSelect.value = prevBranch;
+    branchSelect.dispatchEvent(new Event('change'));
+  }
+
+  // 從官網頁面原始碼解析站點資料（與本機版 server.js 相同邏輯，改在瀏覽器端執行）
+  async function fetchStationsViaProxy() {
+    const res = await fetch(proxied(`${YANNICK_BASE}/ytm/service2`));
+    if (!res.ok) throw new Error('官網頁面回應 ' + res.status);
+    const html = await res.text();
+    const branchsMatch = html.match(/let\s+Branchs\s*=\s*(\[.*\]);/);
+    const machinesMatch = html.match(/let\s+Machines\s*=\s*(\[.*\]);/);
+    if (!branchsMatch || !machinesMatch) throw new Error('無法解析站點資料，官網可能已改版');
+    return { fetchedAt: Date.now(), branchs: JSON.parse(branchsMatch[1]), machines: JSON.parse(machinesMatch[1]) };
+  }
+
+  refreshBtn.addEventListener('click', async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = '更新中…';
+    try {
+      loadError.style.display = 'none';
+      const data = await fetchStationsViaProxy();
+      localStorage.setItem(STATIONS_KEY, JSON.stringify(data));
+      applyStations(data);
+      refreshBtn.textContent = '↻ 更新站點資料（已更新）';
+    } catch (err) {
+      loadError.textContent = '站點資料更新失敗：' + err.message;
+      loadError.style.display = 'block';
+      refreshBtn.textContent = '↻ 更新站點資料';
+    }
+    refreshBtn.disabled = false;
+  });
+
+  branchSelect.addEventListener('change', () => {
+    const code = branchSelect.value;
+    const list = machines.filter(m => m.RID === code).sort((a, b) => b.Sort - a.Sort);
+    stationSelect.innerHTML = '<option value="">請選擇 YTM 站點</option>' +
+      list.map(m => `<option value="${m.TID}">${m.TName}</option>`).join('');
+    stationSelect.disabled = !code;
+    addBtn.disabled = true;
+  });
+
+  stationSelect.addEventListener('change', () => {
+    addBtn.disabled = !stationSelect.value;
+  });
+
+  addBtn.addEventListener('click', () => {
+    const tid = stationSelect.value;
+    if (!tid) return;
+    if (watchList.some(w => w.tid === tid)) {
+      alert('此站點已在清單中');
+      return;
+    }
+    const m = machines.find(x => x.TID === tid);
+    watchList.push({ tid: m.TID, name: m.TName, addr: m.TAddr, branchName: m.RName });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(watchList));
+    renderWatchList();
+  });
+
+  function renderWatchList() {
+    if (watchList.length === 0) {
+      watchListEl.innerHTML = '<p class="empty">尚未加入任何站點，請在上方選擇站點後按「加入清單」</p>';
+      queryBtn.disabled = true;
+      return;
+    }
+    queryBtn.disabled = false;
+    watchListEl.innerHTML = watchList.map((w, i) => `
+      <div class="watch-item">
+        <div>
+          <span class="watch-name">${w.name}</span>
+          <span class="watch-meta">（${w.branchName}）${w.addr}</span>
+        </div>
+        <button class="btn-remove" data-index="${i}" title="移除">✕ 移除</button>
+      </div>`).join('');
+    watchListEl.querySelectorAll('.btn-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        watchList.splice(Number(btn.dataset.index), 1);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(watchList));
+        renderWatchList();
+      });
+    });
+  }
+
+  // 透過代理查詢單一站點庫存
+  async function fetchStock(tid) {
+    const res = await fetch(proxied(`${YANNICK_BASE}/_zh-cht/ajaxTYTMStock.ashx`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ TID: tid }).toString(),
+    });
+    if (!res.ok) throw new Error('代理回應 ' + res.status);
+    return res.json();
+  }
+
+  // 依序查詢清單中所有站點的庫存（一次最多 3 個並行）
+  queryBtn.addEventListener('click', async () => {
+    queryBtn.disabled = true;
+    queryBtn.textContent = '查詢中…';
+    resultCard.style.display = 'block';
+    resultsEl.innerHTML = '<p class="loading">查詢中，請稍候…</p>';
+
+    const items = watchList.slice();
+    const results = new Array(items.length);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        const w = items[idx];
+        try {
+          results[idx] = { station: w, data: await fetchStock(w.tid) };
+        } catch (err) {
+          results[idx] = { station: w, error: err.message };
+        }
+      }
+    }
+    await Promise.all([worker(), worker(), worker()]);
+
+    renderResults(results);
+    queryTimeEl.textContent = '查詢時間：' + new Date().toLocaleString('zh-TW');
+    queryBtn.disabled = false;
+    queryBtn.textContent = '查詢庫存';
+  });
+
+  function renderResults(results) {
+    resultsEl.innerHTML = results.map(r => {
+      const head = `
+        <div class="result-head">
+          <span class="name">${r.station.name}</span>
+          <span class="addr">${r.station.addr}</span>
+        </div>`;
+      if (r.error) {
+        return `<div class="result-station">${head}<p class="error-msg">查詢失敗：${r.error}</p></div>`;
+      }
+      const status = r.data.Status && r.data.Status.code;
+      if (status !== '00') {
+        const msg = (r.data.Alert && r.data.Alert.message) || ('狀態碼 ' + status);
+        return `<div class="result-station">${head}<p class="error-msg">${msg}</p></div>`;
+      }
+      const stock = (r.data.Result && r.data.Result.StockList) || [];
+      if (stock.length === 0) {
+        return `<div class="result-station">${head}<p class="no-stock">此站 YTM 庫存不足</p></div>`;
+      }
+      // 商品名稱含「盲盒」者置頂並以粗體呈現（sort 為穩定排序，其餘商品維持原順序）
+      const isBlindBox = s => s.ProductName.includes('盲盒');
+      const sorted = stock.slice().sort((a, b) => (isBlindBox(b) ? 1 : 0) - (isBlindBox(a) ? 1 : 0));
+      const rows = sorted.map(s => `
+        <tr class="${isBlindBox(s) ? 'pinned' : ''}">
+          <td>${s.ProductName}</td>
+          <td class="num">NT$ ${s.Price}</td>
+          <td class="num ${s.quantity <= 1 ? 'qty-low' : 'qty-ok'}">${s.quantity}</td>
+        </tr>`).join('');
+      return `
+        <div class="result-station">${head}
+          <table>
+            <thead><tr><th>商品名稱</th><th class="num">價格</th><th class="num">庫存數量</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }).join('');
+  }
+
+  // 初始化：優先用使用者更新過的站點資料，否則用內建快照
+  applyStations(loadJson(STATIONS_KEY) || SNAPSHOT);
+  renderWatchList();
+})();
+</script>
+</body>
+</html>

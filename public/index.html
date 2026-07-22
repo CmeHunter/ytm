@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YTM 庫存查詢工具</title>
+<style>
+  :root {
+    --primary: #b5854b;
+    --primary-dark: #966a38;
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --border: #e5ddd0;
+    --text: #3d3529;
+    --muted: #8a7f6e;
+    --danger: #c0392b;
+    --ok: #2e7d32;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    max-width: 860px; margin: 0 auto; padding: 24px 16px 60px;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1.05rem; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  select, button {
+    font-size: .95rem; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: #fff; color: var(--text);
+  }
+  select { min-width: 180px; flex: 1; }
+  button { cursor: pointer; white-space: nowrap; transition: opacity .15s; }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn-query { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: bold; padding: 10px 28px; }
+  .btn-remove { background: none; border: none; color: var(--danger); font-size: 1rem; padding: 2px 6px; }
+  .watch-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 4px; border-bottom: 1px dashed var(--border);
+  }
+  .watch-item:last-child { border-bottom: none; }
+  .watch-name { font-weight: bold; }
+  .watch-meta { color: var(--muted); font-size: .8rem; }
+  .empty { color: var(--muted); text-align: center; padding: 16px 0; font-size: .9rem; }
+  .result-station { margin-bottom: 14px; }
+  .result-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 4px; margin-bottom: 6px;
+  }
+  .result-head .name { font-weight: bold; font-size: 1rem; }
+  .result-head .addr { color: var(--muted); font-size: .8rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg); font-weight: bold; }
+  td.num, th.num { text-align: right; }
+  .qty-low { color: var(--danger); font-weight: bold; }
+  .qty-ok { color: var(--ok); font-weight: bold; }
+  .pinned td { font-weight: bold; }
+  .official-link { color: var(--primary); word-break: break-all; }
+  .no-stock { color: var(--danger); font-size: .9rem; padding: 4px 0; }
+  .error-msg { color: var(--danger); font-size: .9rem; }
+  .loading { color: var(--muted); font-size: .9rem; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .timestamp { color: var(--muted); font-size: .8rem; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1e1a14; --card: #2a2419; --border: #453b2c; --text: #e8e0d2; --muted: #a2957f; }
+    select, button { background: #352d1f; color: var(--text); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-query { background: var(--ok); color: #fff; }
+    th { background: #352d1f; }
+  }
+</style>
+</head>
+<body>
+  <h1>YTM 庫存查詢工具</h1>
+  <p class="subtitle">維護自選 YTM 站點清單，一鍵查詢所有站點的即時庫存<br>
+    資料來源：亞尼克官網庫存查詢頁
+    <a href="https://www.yannick.com.tw/ytm/service2" target="_blank" rel="noopener" class="official-link">https://www.yannick.com.tw/ytm/service2</a>
+  </p>
+
+  <!-- 站點維護區 -->
+  <div class="card">
+    <div class="toolbar">
+      <h2>加入站點</h2>
+      <button id="refreshBtn" title="重新從官網抓取最新站點清單">↻ 更新站點資料</button>
+    </div>
+    <div class="row">
+      <select id="branchSelect">
+        <option value="">請選擇據點分類</option>
+      </select>
+      <select id="stationSelect" disabled>
+        <option value="">請選擇 YTM 站點</option>
+      </select>
+      <button class="btn-primary" id="addBtn" disabled>＋ 加入清單</button>
+    </div>
+    <p class="error-msg" id="loadError" style="display:none; margin-top:8px;"></p>
+  </div>
+
+  <!-- 自選清單區 -->
+  <div class="card">
+    <div class="toolbar">
+      <h2>我的站點清單</h2>
+      <button class="btn-query" id="queryBtn" disabled>查詢庫存</button>
+    </div>
+    <div id="watchList"><p class="empty">尚未加入任何站點，請在上方選擇站點後按「加入清單」</p></div>
+  </div>
+
+  <!-- 查詢結果區 -->
+  <div class="card" id="resultCard" style="display:none;">
+    <div class="toolbar">
+      <h2>庫存查詢結果</h2>
+      <span class="timestamp" id="queryTime"></span>
+    </div>
+    <div id="results"></div>
+  </div>
+
+<script>
+(function () {
+  const STORAGE_KEY = 'ytm-watchlist';
+  let machines = [];   // 全部站點
+  let branchs = [];    // 據點分類
+  let watchList = loadWatchList(); // [{tid, name, addr, branchName}]
+
+  const branchSelect = document.getElementById('branchSelect');
+  const stationSelect = document.getElementById('stationSelect');
+  const addBtn = document.getElementById('addBtn');
+  const queryBtn = document.getElementById('queryBtn');
+  const watchListEl = document.getElementById('watchList');
+  const resultsEl = document.getElementById('results');
+  const resultCard = document.getElementById('resultCard');
+  const queryTimeEl = document.getElementById('queryTime');
+  const loadError = document.getElementById('loadError');
+
+  function loadWatchList() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+  function saveWatchList() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(watchList));
+  }
+
+  // 載入站點資料；refresh 為 true 時強制重新從官網抓取
+  async function loadStations(refresh) {
+    try {
+      loadError.style.display = 'none';
+      const res = await fetch('/api/stations' + (refresh ? '?refresh=1' : ''));
+      if (!res.ok) throw new Error('伺服器回應 ' + res.status);
+      const data = await res.json();
+      branchs = data.branchs;
+      machines = data.machines;
+      const prevBranch = branchSelect.value;
+      branchSelect.innerHTML = '<option value="">請選擇據點分類</option>' +
+        branchs.map(b => `<option value="${b.BranchCode}">${b.BranchName}</option>`).join('');
+      branchSelect.value = prevBranch;
+      branchSelect.dispatchEvent(new Event('change'));
+      return true;
+    } catch (err) {
+      loadError.textContent = '站點資料載入失敗：' + err.message;
+      loadError.style.display = 'block';
+      return false;
+    }
+  }
+
+  const refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn.addEventListener('click', async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = '更新中…';
+    const ok = await loadStations(true);
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = ok ? '↻ 更新站點資料（已更新）' : '↻ 更新站點資料';
+  });
+
+  branchSelect.addEventListener('change', () => {
+    const code = branchSelect.value;
+    const list = machines.filter(m => m.RID === code).sort((a, b) => b.Sort - a.Sort);
+    stationSelect.innerHTML = '<option value="">請選擇 YTM 站點</option>' +
+      list.map(m => `<option value="${m.TID}">${m.TName}</option>`).join('');
+    stationSelect.disabled = !code;
+    addBtn.disabled = true;
+  });
+
+  stationSelect.addEventListener('change', () => {
+    addBtn.disabled = !stationSelect.value;
+  });
+
+  addBtn.addEventListener('click', () => {
+    const tid = stationSelect.value;
+    if (!tid) return;
+    if (watchList.some(w => w.tid === tid)) {
+      alert('此站點已在清單中');
+      return;
+    }
+    const m = machines.find(x => x.TID === tid);
+    watchList.push({ tid: m.TID, name: m.TName, addr: m.TAddr, branchName: m.RName });
+    saveWatchList();
+    renderWatchList();
+  });
+
+  function renderWatchList() {
+    if (watchList.length === 0) {
+      watchListEl.innerHTML = '<p class="empty">尚未加入任何站點，請在上方選擇站點後按「加入清單」</p>';
+      queryBtn.disabled = true;
+      return;
+    }
+    queryBtn.disabled = false;
+    watchListEl.innerHTML = watchList.map((w, i) => `
+      <div class="watch-item">
+        <div>
+          <span class="watch-name">${w.name}</span>
+          <span class="watch-meta">（${w.branchName}）${w.addr}</span>
+        </div>
+        <button class="btn-remove" data-index="${i}" title="移除">✕ 移除</button>
+      </div>`).join('');
+    watchListEl.querySelectorAll('.btn-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        watchList.splice(Number(btn.dataset.index), 1);
+        saveWatchList();
+        renderWatchList();
+      });
+    });
+  }
+
+  // 依序查詢清單中所有站點的庫存（一次最多 3 個並行）
+  queryBtn.addEventListener('click', async () => {
+    queryBtn.disabled = true;
+    queryBtn.textContent = '查詢中…';
+    resultCard.style.display = 'block';
+    resultsEl.innerHTML = '<p class="loading">查詢中，請稍候…</p>';
+
+    const items = watchList.slice();
+    const results = new Array(items.length);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        const w = items[idx];
+        try {
+          const res = await fetch('/api/stock?tid=' + encodeURIComponent(w.tid));
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || ('伺服器回應 ' + res.status));
+          results[idx] = { station: w, data };
+        } catch (err) {
+          results[idx] = { station: w, error: err.message };
+        }
+      }
+    }
+    await Promise.all([worker(), worker(), worker()]);
+
+    renderResults(results);
+    queryTimeEl.textContent = '查詢時間：' + new Date().toLocaleString('zh-TW');
+    queryBtn.disabled = false;
+    queryBtn.textContent = '查詢庫存';
+  });
+
+  function renderResults(results) {
+    resultsEl.innerHTML = results.map(r => {
+      const head = `
+        <div class="result-head">
+          <span class="name">${r.station.name}</span>
+          <span class="addr">${r.station.addr}</span>
+        </div>`;
+      if (r.error) {
+        return `<div class="result-station">${head}<p class="error-msg">查詢失敗：${r.error}</p></div>`;
+      }
+      const status = r.data.Status && r.data.Status.code;
+      if (status !== '00') {
+        const msg = (r.data.Alert && r.data.Alert.message) || ('狀態碼 ' + status);
+        return `<div class="result-station">${head}<p class="error-msg">${msg}</p></div>`;
+      }
+      const stock = (r.data.Result && r.data.Result.StockList) || [];
+      if (stock.length === 0) {
+        return `<div class="result-station">${head}<p class="no-stock">此站 YTM 庫存不足</p></div>`;
+      }
+      // 商品名稱含「盲盒」者置頂並以粗體呈現（sort 為穩定排序，其餘商品維持原順序）
+      const isBlindBox = s => s.ProductName.includes('盲盒');
+      const sorted = stock.slice().sort((a, b) => (isBlindBox(b) ? 1 : 0) - (isBlindBox(a) ? 1 : 0));
+      const rows = sorted.map(s => `
+        <tr class="${isBlindBox(s) ? 'pinned' : ''}">
+          <td>${s.ProductName}</td>
+          <td class="num">NT$ ${s.Price}</td>
+          <td class="num ${s.quantity <= 1 ? 'qty-low' : 'qty-ok'}">${s.quantity}</td>
+        </tr>`).join('');
+      return `
+        <div class="result-station">${head}
+          <table>
+            <thead><tr><th>商品名稱</th><th class="num">價格</th><th class="num">庫存數量</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }).join('');
+  }
+
+  loadStations(false);
+  renderWatchList();
+})();
+</script>
+</body>
+</html>

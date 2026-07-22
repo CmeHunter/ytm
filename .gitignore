@@ -1,0 +1,5 @@
+# 執行時自動產生的站點快取
+stations-cache.json
+
+# 工具狀態目錄
+.omc/
