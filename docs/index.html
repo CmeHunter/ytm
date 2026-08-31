@@ -132,7 +132,8 @@ const SNAPSHOT = {"fetchedAt":1784692522845,"branchs":[{"BranchCode":"001","Bran
   const STATIONS_KEY = 'ytm-stations';
   const YANNICK_BASE = 'https://www.yannick.com.tw';
   // GitHub Pages 為純靜態網頁，透過公開 CORS 代理轉發請求（官網 API 不允許跨網域直接呼叫）
-  const proxied = url => 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+  // 注意：corsproxy.io 已改為需註冊網域（匿名請求一律回 401），故改用 cors.eu.org（支援 GET/POST 轉發）
+  const proxied = url => 'https://cors.eu.org/' + url;
 
   let machines = [];
   let branchs = [];

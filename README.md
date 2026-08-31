@@ -7,7 +7,7 @@
 
 | 版本 | 位置 | 說明 |
 |---|---|---|
-| GitHub Pages 靜態版 | `docs/index.html` | 純前端，透過公開 CORS 代理（corsproxy.io）呼叫官網 API，放上 GitHub Pages 即可使用 |
+| GitHub Pages 靜態版 | `docs/index.html` | 純前端，透過公開 CORS 代理（cors.eu.org）呼叫官網 API，放上 GitHub Pages 即可使用 |
 | 本機伺服器版 | `server.js` + `public/index.html` | 由本機 Node 伺服器代理 API，不依賴第三方代理服務，較穩定 |
 
 ## 功能
@@ -71,5 +71,5 @@ node monitor.js
 ## 注意事項
 
 - 庫存 API 為亞尼克官網內部端點，非公開 API，官網改版時可能需要調整解析規則
-- 靜態版依賴 corsproxy.io 免費代理服務；若該服務失效，改用本機伺服器版即可
+- 靜態版依賴 cors.eu.org 免費代理服務；若該服務失效，改用本機伺服器版即可
 - 請以合理頻率查詢（按鈕觸發），勿高頻自動輪詢
